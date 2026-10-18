@@ -9,7 +9,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 [ $# -eq 2 ] || { echo "usage: ports/overlay/merge.sh linux|windows OUT" >&2; exit 1; }
 platform="$1"; out="$2"
 [ -f "$here/$platform.ini" ] || { echo "error: no overlay for $platform" >&2; exit 1; }
-known="layout demoteSensitive prediction abbreviation english englishInline acgPack glassTint candidateVertical rerank rerankLevel profileMode"
+known="layout demoteSensitive prediction abbreviation english englishInline cjkSpacing acgPack glassTint candidateVertical rerank rerankLevel profileMode"
 awk -v platform="$platform" -v known="$known" '
   BEGIN { split(known, ks, " "); for (j in ks) ok[ks[j]] = 1 }
   { sub(/\r$/, "") }
