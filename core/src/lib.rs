@@ -11,6 +11,8 @@ pub mod lm;
 pub mod predict;
 pub mod tinylm;
 mod trigram;
+#[cfg(windows)]
+mod win_compat;
 
 use std::collections::HashMap;
 use std::fmt;
