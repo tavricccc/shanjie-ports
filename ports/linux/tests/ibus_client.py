@@ -114,6 +114,12 @@ try:
     desc = ic.get_engine()
     if desc is None or desc.get_name() != "shanjie":
         raise SystemExit("input context did not switch to shanjie: %r" % (desc.get_name() if desc else None))
+    # IBus before 1.5.32 sends the first FocusIn before it has read the engine's FocusId property, so that focus carries
+    # no client name (bus/engineproxy.c; 1.5.32 sends FocusInId again once the property arrives). Focus once more, as any
+    # real focus change does, so every daemon version gives the engine the app identity (ports/docs/porting.md).
+    ic.focus_out()
+    ic.focus_in()
+    pump(0.3)
     for entry in script["keys"]:
         if entry[0] in ("focus_in", "focus_out", "reset"):
             log.append({"step": entry[0]})
