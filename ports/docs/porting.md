@@ -35,7 +35,7 @@
 | 候選編號 | 每格都給標籤，不顯示號碼的格給空白 | 少了標籤，GNOME Shell 會自己補上預設號碼 |
 | 英文段提示（空白：英文斷開） | IBus 的 auxiliary text | IBus 沒有單獨的提示窗 |
 | 選單 | IBus properties：鍵盤排列是 RADIO，開關是 TOGGLE，資訊行是不可選的 NORMAL | IBus 的選單元件 |
-| App 識別 | 引擎宣告 FocusId，daemon 才會用 FocusInId 傳 client 名稱。GNOME Wayland 下有些 App 可能只回報 `gnome-shell`，這時當成一個已知 App（用書面） | IBus 的介面 |
+| App 識別 | 引擎宣告 FocusId，daemon 才會用 FocusInId 傳 client 名稱。IBus 1.5.32 以前（例如 Ubuntu 24.04 的 1.5.29），引擎啟動後的第一次聚焦在 daemon 讀到這個屬性之前就送出，沒有 client 名稱：那個 App 要等焦點換過一次才認得（之前當成未知的 App：書面、學習暫停）。引擎這邊拿不到名稱，無法補救。GNOME Wayland 下有些 App 可能只回報 `gnome-shell`，這時當成一個已知 App（用書面） | IBus 的介面 |
 | 左側前文 | 宣告 ActiveSurroundingText，讀 SetSurroundingText；不支援的 App 就沒有前文 | IBus 的介面 |
 
 ## Windows（TSF）
