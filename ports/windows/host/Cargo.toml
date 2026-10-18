@@ -1,0 +1,21 @@
+[package]
+name = "shanjie-host"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "shanjie-host.exe: owns the shell and the engine for every app, draws the candidate window"
+
+[[bin]]
+name = "shanjie-host"
+path = "src/main.rs"
+
+[lib]
+name = "shanjie_host"
+path = "src/lib.rs"
+
+[dependencies]
+shanjie-shell = { path = "../../shell" }
+shanjie-proto = { path = "../proto" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
