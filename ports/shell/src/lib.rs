@@ -5,6 +5,7 @@
 pub mod core;
 pub mod keys;
 pub mod menu;
+pub mod menu_tree;
 pub mod panel;
 pub mod prefs;
 pub mod shell;

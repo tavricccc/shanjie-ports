@@ -534,3 +534,24 @@ fn rerank_jobs_run_one_at_a_time_and_apply_to_the_owner() {
     w.enter(1, 0);
     assert!(!w.view(1).text.is_empty());
 }
+
+#[test]
+fn menu_tree_choices_by_key() {
+    use shanjie_shell::menu_tree::{self, Kind};
+    let mut s = shell();
+    s.open_session(1, ClientInfo { app_id: Some("editor".into()), ..Default::default() });
+    let mut out = Effects::new();
+    // TSF reports only the choice: a toggle flips.
+    menu_tree::activate(&mut s, 1, "prediction", None, &mut out);
+    assert!(!s.settings().prediction);
+    // IBus reports the new state: the same state again does nothing.
+    menu_tree::activate(&mut s, 1, "prediction", Some(false), &mut out);
+    assert!(!s.settings().prediction);
+    menu_tree::activate(&mut s, 1, "set.orientation.vertical", None, &mut out);
+    assert!(s.settings().candidate_vertical);
+    let tree = menu_tree::build(&s, 1);
+    let keys: Vec<&str> = tree.iter().map(|n| n.key.as_str()).collect();
+    assert_eq!(&keys[..2], &["layout.standard", "layout.eten"]);
+    assert!(tree.iter().any(|n| n.key == "clear" && n.kind == Kind::Submenu && n.children.len() == 3));
+    assert!(!keys.contains(&"settings"), "善解設定… becomes the window's submenus");
+}
