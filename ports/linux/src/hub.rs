@@ -63,6 +63,28 @@ pub enum Msg {
     RerankDone { ticket: u64, job: RerankJob, code: i32 },
 }
 
+impl Msg {
+    /// One line for `SHANJIE_TRACE`.
+    fn describe(&self) -> String {
+        match self {
+            Msg::Open(id) => format!("open {id}"),
+            Msg::Close(id) => format!("close {id}"),
+            Msg::Key { id, keyval, keycode, state, .. } => format!("key {id} {keyval:#x} {keycode} {state:#x}"),
+            Msg::FocusIn { id, client, .. } => format!("focus in {id} {client:?}"),
+            Msg::FocusOut { id, .. } => format!("focus out {id}"),
+            Msg::Reset { id, .. } => format!("reset {id}"),
+            Msg::Enable { id, .. } => format!("enable {id}"),
+            Msg::Disable { id, .. } => format!("disable {id}"),
+            Msg::Surrounding { id, text, cursor, anchor } => format!("surrounding {id} {text:?} {cursor} {anchor}"),
+            Msg::ContentType { id, purpose } => format!("content type {id} {purpose}"),
+            Msg::Click { id, index, .. } => format!("click {id} {index}"),
+            Msg::Page { id, up, .. } => format!("page {id} up={up}"),
+            Msg::Property { id, name, state, .. } => format!("property {id} {name} {state}"),
+            Msg::RerankDone { ticket, code, .. } => format!("rerank done {ticket} {code}"),
+        }
+    }
+}
+
 #[derive(Default)]
 struct Ctx {
     app: Option<String>,
@@ -154,7 +176,14 @@ pub fn start(async_out: async_channel::Sender<Out>) -> mpsc::Sender<Msg> {
                 .expect("rerank thread");
             shell.set_rerank_runner(Box::new(Runner(jobs_tx)));
             let mut hub = Hub { shell, ctx: HashMap::new(), focused: None, async_out };
+            let trace = std::env::var_os("SHANJIE_TRACE").is_some();
+            if trace {
+                eprintln!("ibus-engine-shanjie: data {}, settings {:?}, learning {:?}", crate::paths::data().display(), crate::paths::settings(), crate::paths::learning());
+            }
             for msg in rx {
+                if trace {
+                    eprintln!("ibus-engine-shanjie: {}", msg.describe());
+                }
                 hub.handle(msg);
             }
         })
