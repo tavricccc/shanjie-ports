@@ -48,10 +48,14 @@ impl Listener for FakeListener {
 }
 
 fn hub() -> (Hub, Shared) {
+    hub_learning_in(None)
+}
+
+fn hub_learning_in(learning_directory: Option<PathBuf>) -> (Hub, Shared) {
     let tables = shanjie_host::tables::tables();
     let setup = Setup {
         resources: data(),
-        learning_directory: None,
+        learning_directory,
         tables,
         shows_abbreviation: false,
         punctuation: None,
@@ -198,4 +202,30 @@ fn closing_the_owner_hides_the_window() {
 fn another_protocol_gets_no_session() {
     let (mut h, _) = hub();
     assert_eq!(h.request(Request::Hello { protocol: PROTOCOL + 1, app: None }), Reply::Session(0));
+}
+
+/// The learning store through the core's file code (on Windows, its shim: ports/docs/core-windows.md): a pick is
+/// written to learning.tsv, and a new engine opens the file again.
+#[test]
+fn a_pick_is_written_to_the_learning_file() {
+    let dir = std::env::temp_dir().join(format!("shanjie-host-learning-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (mut h, seen) = hub_learning_in(Some(dir.clone()));
+    let a = hello(&mut h, "notepad.exe");
+    type_keys(&mut h, a, "su3 ");
+    let second = match &seen.borrow().panel {
+        Some((View::Candidates { cells, .. }, _)) => cells[1].text.clone(),
+        p => panic!("{p:?}"),
+    };
+    let mut t = type_keys(&mut h, a, "2");
+    t.extend(key(&mut h, a, ENTER).1);
+    assert_eq!(inserts(&t).concat(), second);
+    assert!(!h.shell().learning_unavailable());
+    let file = std::fs::read_to_string(dir.join("learning.tsv")).expect("learning.tsv");
+    assert!(file.starts_with("#shanjie-learning v1"), "{file}");
+    assert!(file.contains(&second), "{file}");
+    drop(h);
+    let (h, _) = hub_learning_in(Some(dir.clone()));
+    assert!(!h.shell().learning_unavailable(), "the file opens again");
+    let _ = std::fs::remove_dir_all(&dir);
 }
