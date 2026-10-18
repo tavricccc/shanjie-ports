@@ -18,6 +18,7 @@ pub mod key {
     pub const ABBREVIATION: &str = "abbreviation";
     pub const ENGLISH: &str = "english";
     pub const ENGLISH_INLINE: &str = "englishInline";
+    pub const CJK_SPACING: &str = "cjkSpacing";
     pub const ACG_PACK: &str = "acgPack";
     pub const GLASS_TINT: &str = "glassTint";
     pub const CANDIDATE_VERTICAL: &str = "candidateVertical";
@@ -37,6 +38,7 @@ pub struct Defaults {
     pub abbreviation: bool,
     pub english: bool,
     pub english_inline: bool,
+    pub cjk_spacing: bool,
     pub acg_pack: bool,
     pub glass_tint: f64,
     pub candidate_vertical: bool,
@@ -54,6 +56,7 @@ impl Defaults {
             abbreviation: false,
             english: true,
             english_inline: true,
+            cjk_spacing: false,
             acg_pack: true,
             glass_tint: 0.0,
             candidate_vertical: false,
@@ -77,6 +80,7 @@ impl Defaults {
                 key::ABBREVIATION => set_bool(&mut d.abbreviation, &v),
                 key::ENGLISH => set_bool(&mut d.english, &v),
                 key::ENGLISH_INLINE => set_bool(&mut d.english_inline, &v),
+                key::CJK_SPACING => set_bool(&mut d.cjk_spacing, &v),
                 key::ACG_PACK => set_bool(&mut d.acg_pack, &v),
                 key::GLASS_TINT => v.parse::<f64>().ok().filter(|x| (0.0..=1.0).contains(x)).map(|x| d.glass_tint = x).is_some(),
                 key::CANDIDATE_VERTICAL => set_bool(&mut d.candidate_vertical, &v),

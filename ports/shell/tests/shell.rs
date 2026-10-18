@@ -555,3 +555,240 @@ fn menu_tree_choices_by_key() {
     assert!(tree.iter().any(|n| n.key == "clear" && n.kind == Kind::Submenu && n.children.len() == 3));
     assert!(!keys.contains(&"settings"), "善解設定… becomes the window's submenus");
 }
+
+// MARK: CJKSpacingTests.swift (docs/contracts/cjk-spacing.md section 3)
+
+#[test]
+fn spacing_table() {
+    use shanjie_shell::spacing;
+    let rows: &[(Option<&str>, &str, &str)] = &[
+        // section 1 examples
+        (None, "我用claude寫", "我用 claude 寫"),
+        (None, "2026下午3點", "2026 下午 3 點"),
+        (None, "我用 claude 寫", "我用 claude 寫"),
+        (None, "（2026）", "（2026）"),
+        (None, "，claude", "，claude"),
+        // previous character: letter, digit, Han, space, full-width punctuation, none
+        (Some("e"), "寫", " 寫"), (Some("3"), "點", " 點"), (Some("寫"), "claude", " claude"), (Some("寫"), "3", " 3"),
+        (Some("e"), "claude", "claude"), (Some("寫"), "寫", "寫"),
+        (Some(" "), "寫", "寫"), (Some(" "), "claude", "claude"),
+        (Some("，"), "寫", "寫"), (Some("，"), "claude", "claude"),
+        (None, "寫", "寫"), (None, "claude", "claude"),
+        // supplementary-plane Han (U+20000) on both sides
+        (None, "\u{20000}a", "\u{20000} a"), (None, "a\u{20000}", "a \u{20000}"),
+        (Some("a"), "\u{20000}", " \u{20000}"), (Some("\u{20000}"), "a", " a"),
+        // Han with a variation selector (U+845B U+E0100) is one character whose first scalar is Han, on both sides
+        (None, "\u{845B}\u{E0100}a", "\u{845B}\u{E0100} a"), (None, "a\u{845B}\u{E0100}", "a \u{845B}\u{E0100}"),
+        (Some("\u{845B}\u{E0100}"), "a", " a"), (Some("a"), "\u{845B}\u{E0100}", " \u{845B}\u{E0100}"),
+        // only punctuation, empty
+        (None, "，。！", "，。！"), (Some("e"), "，", "，"), (Some("寫"), "，", "，"),
+        (None, "", ""), (Some("e"), "", ""),
+        // other characters never trigger: full-width alphanumerics, bopomofo, ASCII symbols
+        (None, "我Ａ", "我Ａ"), (None, "ㄅa", "ㄅa"), (None, "我%", "我%"), (None, "我@a", "我@a"),
+        // an ASCII letter with a combining mark is not ASCII (Swift's Character.isASCII)
+        (None, "我e\u{301}", "我e\u{301}"),
+    ];
+    for (p, text, want) in rows {
+        assert_eq!(spacing::apply(p.and_then(spacing::last), text), *want, "{p:?} + {text}");
+    }
+}
+
+fn spacing_shell(spacing: Option<bool>) -> Shell {
+    let mut prefs = Prefs::memory();
+    if let Some(on) = spacing {
+        prefs.set_bool(key::CJK_SPACING, on);
+    }
+    shell_with(prefs)
+}
+
+impl World {
+    /// The client's text before the insertion point (Support.swift `FakeClient.before`), in an app that learns (an
+    /// unknown app pauses learning, and a paused gate reads nothing).
+    fn before(&mut self, id: SessionId, text: &str, secure: bool) {
+        let left = Some(shanjie_shell::shell::left_text(text));
+        self.shell.set_client(id, ClientInfo { app_id: Some("text.app".into()), left, secure_input: secure });
+    }
+
+    fn pick(&mut self, id: SessionId, index: u32) -> bool {
+        let mut out = Effects::new();
+        let picked = self.shell.candidate_selected(id, index, &mut out);
+        self.run(out);
+        picked
+    }
+
+    fn last_insert(&self, id: SessionId) -> String {
+        self.view(id).inserts.last().cloned().unwrap_or_default()
+    }
+}
+
+#[test]
+fn spacing_store_defaults_to_off() {
+    assert!(!spacing_shell(None).settings().spacing);
+    assert!(spacing_shell(Some(true)).settings().spacing);
+    assert!(!spacing_shell(Some(false)).settings().spacing);
+    let mut d = Defaults::upstream();
+    d.cjk_spacing = true;
+    assert!(Shell::new(setup(), Prefs::memory(), &d).settings().spacing, "the overlay sets a never-chosen key");
+}
+
+#[test]
+fn spacing_setter_stores_and_notifies() {
+    let mut s = spacing_shell(None);
+    let mut out = Effects::new();
+    s.set_spacing(true, &mut out);
+    assert!(s.settings().spacing);
+    assert_eq!(out.iter().filter(|(_, e)| *e == Effect::SettingsChanged).count(), 1);
+}
+
+/// Off: the insert is the core's commit byte for byte, even with a Latin letter before the cursor.
+#[test]
+fn spacing_off_is_byte_identical() {
+    let mut w = World::new(spacing_shell(None));
+    w.open(1, None);
+    w.before(1, "claude", false);
+    w.activate(1);
+    w.type_keys(1, "su3cl3");
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts, ["你好"]);
+}
+
+#[test]
+fn spacing_on_adds_a_leading_space_from_the_character_before_the_cursor() {
+    let mut w = World::new(spacing_shell(Some(true)));
+    let cases = [("claude", " 你好"), ("2026", " 你好"), ("今天", "你好"), ("今天 ", "你好"), ("今天，", "你好"), ("", "你好")];
+    for (n, (before, want)) in cases.into_iter().enumerate() {
+        let id = n as SessionId + 1;
+        w.open(id, None);
+        w.before(id, before, false);
+        w.activate(id);
+        w.type_keys(id, "su3cl3");
+        w.enter(id, 0);
+        assert_eq!(w.view(id).inserts, [want], "before: {before}");
+    }
+}
+
+/// The previous character is the raw last character of the read, not only the Han tail.
+#[test]
+fn spacing_leading_space_uses_the_raw_last_character() {
+    let mut w = World::new(spacing_shell(Some(true)));
+    w.open(1, None);
+    w.before(1, &format!("{}x", "中".repeat(40)), false);
+    w.activate(1);
+    w.type_keys(1, "su3cl3");
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts, [" 你好"]);
+}
+
+/// 39 syllables, then an English run closed by a Zhuyin key as the 40th unit: everything is committed and the key starts
+/// a new syllable in the same composition. Returns the world with that first commit made.
+fn after_the_first_commit_of_one_composition() -> World {
+    let mut w = World::new(spacing_shell(Some(true)));
+    w.open(1, None);
+    w.activate(1);
+    for _ in 0..39 {
+        w.type_keys(1, "su3");
+    }
+    w.press(1, ch('c', keys::SHIFT));
+    w.type_keys(1, "laude2");
+    assert_eq!(w.view(1).inserts, [format!("{} Claude", "你".repeat(39))]);
+    w
+}
+
+/// The second commit's leading space follows the first commit's last character (the e of Claude), not the client.
+#[test]
+fn spacing_second_commit_in_the_same_composition_uses_the_last_committed_character() {
+    let mut w = after_the_first_commit_of_one_composition();
+    w.type_keys(1, "u3");
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts.len(), 2);
+    assert_eq!(w.last_insert(1), " 底");
+}
+
+/// A paused gate reads nothing, so there is no leading space; spaces inside the text still go in.
+#[test]
+fn spacing_paused_learning_skips_the_leading_space_only() {
+    let mut w = World::new(spacing_shell(Some(true)));
+    w.open(1, None);
+    w.before(1, "claude", true);
+    w.activate(1);
+    w.type_keys(1, "su3cl3");
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts, ["你好"], "no leading space");
+    w.type_keys(1, "su3");
+    w.press(1, ch('c', keys::SHIFT));
+    w.type_keys(1, "laude2u3");
+    w.enter(1, 0);
+    assert_eq!(w.last_insert(1), "你 Claude 底");
+}
+
+#[test]
+fn spacing_variation_selector_han_counts_as_han_for_the_leading_space() {
+    let mut w = World::new(spacing_shell(Some(true)));
+    w.open(1, None);
+    w.before(1, "\u{845B}\u{E0100}", false);
+    w.activate(1);
+    w.press(1, ch('c', keys::SHIFT));
+    w.type_keys(1, "laude");
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts, [" Claude"]);
+}
+
+/// A commit straight from the candidates, with no key in between, follows the last committed character.
+#[test]
+fn spacing_pick_after_a_commit_uses_the_last_committed_character() {
+    let mut w = after_the_first_commit_of_one_composition();
+    assert!(w.pick(1, 0));
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts.len(), 2);
+    assert!(w.last_insert(1).starts_with(' '), "{}", w.last_insert(1));
+}
+
+/// A pass-through key (Cmd+C: the app acts on it, the cursor may move) forgets the previous character.
+#[test]
+fn spacing_pass_through_key_clears_it_before_a_pick() {
+    let mut w = after_the_first_commit_of_one_composition();
+    assert!(!w.press(1, ch('c', keys::COMMAND)), "Cmd+C is not handled");
+    assert!(w.pick(1, 0));
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts.len(), 2);
+    assert!(!w.last_insert(1).starts_with(' '), "{}", w.last_insert(1));
+}
+
+/// Ctrl+\ starts a composition without reading the client, and the composition's first key still clears the previous
+/// character: 你好、 gets no space after the previous commit that ended in a letter.
+#[test]
+fn spacing_control_key_starting_a_composition_clears_an_old_previous_character() {
+    let mut w = World::new(spacing_shell(Some(true)));
+    w.open(1, None);
+    w.activate(1);
+    w.type_keys(1, "su3");
+    w.press(1, ch('c', keys::SHIFT));
+    w.type_keys(1, "laude");
+    w.enter(1, 0);
+    assert_eq!(w.view(1).inserts, ["你 Claude"]);
+    w.press(1, ch('\\', keys::CONTROL));
+    w.press(1, KeyInput::Mapped(keys::special(keys::LEFT, 0)));
+    w.type_keys(1, "su3cl3");
+    w.enter(1, 0);
+    assert_eq!(w.last_insert(1), "你好、");
+}
+
+/// The settings menu's toggle reads and sets the switch; the strings are the contract's.
+#[test]
+fn spacing_menu_toggle_and_strings() {
+    use shanjie_shell::menu_tree;
+    let mut w = World::new(spacing_shell(None));
+    w.open(1, None);
+    let find = |s: &Shell| menu_tree::build(s, 1).into_iter().find(|n| n.key == "set.spacing").expect("set.spacing");
+    let n = find(&w.shell);
+    assert_eq!((n.kind, n.label.as_str(), n.checked, n.enabled), (menu_tree::Kind::Toggle, text::SPACING, false, true));
+    let mut out = Effects::new();
+    menu_tree::activate(&mut w.shell, 1, "set.spacing", None, &mut out);
+    assert!(find(&w.shell).checked);
+    menu_tree::activate(&mut w.shell, 1, "set.spacing", Some(true), &mut out);
+    assert!(w.shell.settings().spacing, "already on: no change");
+    menu_tree::activate(&mut w.shell, 1, "set.spacing", Some(false), &mut out);
+    assert!(!w.shell.settings().spacing);
+    assert_eq!(text::SPACING, "中英文之間自動加空格");
+    assert_eq!(text::SPACING_NOTE, "在漢字和半形英文、數字之間自動加一個空格（俗稱「盤古之白」）。只改善解送出的文字。");
+}

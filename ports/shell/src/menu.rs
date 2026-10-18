@@ -77,6 +77,9 @@ pub mod text {
     pub const ENGLISH_DISPLAY: &str = "英文的顯示";
     pub const ENGLISH_DISPLAY_TYPED: &str = "打字時就顯示";
     pub const ENGLISH_DISPLAY_SPACE: &str = "按空白才顯示";
+    /// The spacing toggle in the settings window and the line under it (cjk-spacing section 2).
+    pub const SPACING: &str = "中英文之間自動加空格";
+    pub const SPACING_NOTE: &str = "在漢字和半形英文、數字之間自動加一個空格（俗稱「盤古之白」）。只改善解送出的文字。";
     pub const ABBREVIATION: &str = "可省略韻母";
     pub const RERANK: &str = "語意校正";
     pub const ACG_PACK: &str = "動漫與遊戲詞";

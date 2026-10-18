@@ -14,6 +14,7 @@ use crate::core::{CoreEngine, CoreOutput, CoreResult, RerankJob, NO_CHANGE};
 use crate::keys::{self, KeyInput, ShanjieKey};
 use crate::menu::{text, Action, InputMode, MenuEntry};
 use crate::prefs::{key, Defaults, Prefs};
+use crate::spacing;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
@@ -193,6 +194,8 @@ pub struct SettingsState {
     pub english_enabled: bool,
     pub english_inline: bool,
     pub english_inline_enabled: bool,
+    /// 中英文之間自動加空格 (cjk-spacing section 2).
+    pub spacing: bool,
     pub demote: bool,
     pub rerank: bool,
     pub rerank_enabled: bool,
@@ -224,6 +227,11 @@ pub struct Shell {
     prediction_on: bool,
     abbreviation_on: bool,
     shows_abbreviation: bool,
+    /// cjk-spacing: a space between Han and ASCII letters or digits in the text the shell commits.
+    spacing_on: bool,
+    /// cjk-spacing section 1, Swift's `Session.spacingPrev`: per session, the kind of the character before the cursor as
+    /// far as the shell knows it; absent when unknown. Never logged.
+    spacing_prev: HashMap<SessionId, spacing::Kind>,
     english_on: bool,
     english_inline_on: bool,
     english_available: bool,
@@ -321,6 +329,8 @@ impl Shell {
             prediction_on: prefs.bool(key::PREDICTION).unwrap_or(defaults.prediction),
             abbreviation_on: shows_abbreviation && prefs.bool(key::ABBREVIATION).unwrap_or(defaults.abbreviation),
             shows_abbreviation,
+            spacing_on: prefs.bool(key::CJK_SPACING).unwrap_or(defaults.cjk_spacing),
+            spacing_prev: HashMap::new(),
             english_on: prefs.bool(key::ENGLISH).unwrap_or(defaults.english),
             english_inline_on: prefs.bool(key::ENGLISH_INLINE).unwrap_or(defaults.english_inline),
             english_available: false,
@@ -467,6 +477,13 @@ impl Shell {
                 self.drop_on_failure(r, out)
             }
         }
+    }
+
+    /// `setSpacing`: the shell's own switch, nothing goes to the core.
+    pub fn set_spacing(&mut self, on: bool, out: &mut Effects) {
+        self.spacing_on = on;
+        self.prefs.set_bool(key::CJK_SPACING, on);
+        self.changed(out);
     }
 
     pub fn apply_english(&mut self, on: bool, out: &mut Effects) {
@@ -861,6 +878,7 @@ impl Shell {
             self.panel_session = None;
         }
         self.clients.remove(&id);
+        self.spacing_prev.remove(&id);
         if self.owner.is_none() && self.composing {
             self.discard_orphan(out);
         }
@@ -898,6 +916,7 @@ impl Shell {
 
     /// `Session.deactivate()`.
     pub fn deactivate(&mut self, id: SessionId, out: &mut Effects) {
+        self.spacing_prev.remove(&id);
         if self.owner != Some(id) {
             return;
         }
@@ -948,6 +967,10 @@ impl Shell {
                 None => self.discard_orphan(out),
             }
         }
+        if let Some(previous) = self.owner {
+            self.spacing_prev.remove(&previous);
+        }
+        self.spacing_prev.remove(&id);
         self.owner = Some(id);
         true
     }
@@ -1014,20 +1037,31 @@ impl Shell {
         }
         let paused = self.apply_learning_gate(id);
         // Once per composition, before the key that may start it: only a character key without Control, Option, Command
-        // or Caps Lock can start one.
-        if !self.composing && key.kind == keys::CHAR && key.modifiers & !keys::SHIFT == 0 {
-            let context = if paused { None } else { self.left_context(id) };
-            if let Some(e) = &self.engine {
-                let _ = e.set_left_context(context.as_deref());
+        // or Caps Lock can start one. cjk-spacing section 1: the previous character starts as unknown for every key that
+        // may start a composition, modifiers or not, and is taken from the same read.
+        if !self.composing {
+            self.spacing_prev.remove(&id);
+            if key.kind == keys::CHAR && key.modifiers & !keys::SHIFT == 0 {
+                let (han, last) = if paused { (None, None) } else { self.left_context(id) };
+                if let Some(k) = last {
+                    self.spacing_prev.insert(id, k);
+                }
+                if let Some(e) = &self.engine {
+                    let _ = e.set_left_context(han.as_deref());
+                }
             }
         }
         let r = self.engine.as_ref().map(|e| e.key(key));
         match r {
             Some(CoreResult::Ok(o)) => {
                 let handled = o.handled;
-                // handled 0 with nothing to commit is a pure pass-through: the client is not touched either.
+                // handled 0 with nothing to commit is a pure pass-through: the client is not touched either. The app
+                // inserts or moves the cursor by itself then, so the previous character is unknown.
                 if o.handled || !o.commit.is_empty() {
                     self.apply(id, o, out);
+                }
+                if !handled {
+                    self.spacing_prev.remove(&id);
                 }
                 handled
             }
@@ -1055,7 +1089,11 @@ impl Shell {
     /// `Session.apply(_:)`: commit first, then the preedit, then the candidates (section 7).
     fn apply(&mut self, id: SessionId, o: CoreOutput, out: &mut Effects) {
         if !o.commit.is_empty() {
-            out.push((id, Effect::Insert(o.commit.clone())));
+            let text = if self.spacing_on { spacing::apply(self.spacing_prev.get(&id).copied(), &o.commit) } else { o.commit.clone() };
+            if let Some(k) = spacing::last(&text) {
+                self.spacing_prev.insert(id, k);
+            }
+            out.push((id, Effect::Insert(text)));
         }
         if !o.preedit.is_empty() {
             out.push((
@@ -1099,13 +1137,13 @@ impl Shell {
         paused
     }
 
-    /// `leftContext()`.
-    fn left_context(&self, id: SessionId) -> Option<String> {
-        let left = self.client(id).left?;
-        if left.text.is_empty() {
-            return None;
+    /// `leftContext()`: the trailing Han characters for the core and, from the same read, the kind of the last character
+    /// for cjk-spacing.
+    fn left_context(&self, id: SessionId) -> (Option<String>, Option<spacing::Kind>) {
+        match self.client(id).left {
+            Some(left) if !left.text.is_empty() => (han_tail(&left.text, left.truncated), spacing::last(&left.text)),
+            _ => (None, None),
         }
-        han_tail(&left.text, left.truncated)
     }
 
     /// `Session.menu`, in order.
@@ -1207,6 +1245,7 @@ impl Shell {
             english_enabled: self.english_enabled(),
             english_inline: self.english_inline_on,
             english_inline_enabled: self.english_enabled() && self.english_on,
+            spacing: self.spacing_on,
             demote: self.demote_on,
             rerank: self.rerank_on,
             rerank_enabled: self.rerank_enabled(),

@@ -3,8 +3,9 @@
 //! - 標準鍵盤 / 倚天鍵盤 are radio items, the switches toggles, the lines without an action insensitive items;
 //! - 善解設定… opens a window on macOS. The ports have no settings window, so the window's settings that the menu does
 //!   not already hold appear where 善解設定… stands, one submenu each (a panel shows one level of submenus): 切換方式,
-//!   個別設定的 App (choosing an app removes it, the window's 移除), 英文的顯示, 語意校正強度, 候選窗方向. The glass tint
-//!   slider has nothing to tint on the ports and is left out.
+//!   個別設定的 App (choosing an app removes it, the window's 移除), 英文的顯示, then 中英文之間自動加空格 as a toggle
+//!   (its explanatory line has no place in a menu), 語意校正強度, 候選窗方向. The glass tint slider has nothing to tint
+//!   on the ports and is left out.
 //! - 清除選字記憶… asks first on macOS (an alert with 清除 and 取消). Here it is a submenu with those two items, the alert's
 //!   title as its first line.
 //! A node is chosen by its key (`activate`).
@@ -115,6 +116,8 @@ fn settings_submenus(shell: &Shell) -> Vec<Node> {
             radio("set.englishInline.space", text::ENGLISH_DISPLAY_SPACE, !s.english_inline, e),
         ],
     ));
+    // Always enabled, independent of the 中英混打 switch (cjk-spacing section 2).
+    out.push(node("set.spacing", Kind::Toggle, text::SPACING, s.spacing, true, Vec::new()));
     let e = s.rerank_level_enabled;
     out.push(submenu(
         "set.rerankLevel",
@@ -177,6 +180,12 @@ pub fn activate(shell: &mut Shell, id: SessionId, key: &str, checked: Option<boo
         "set.rerankLevel.aggressive" if selects => shell.apply_rerank_level(RerankLevel::Aggressive, out),
         "set.orientation.horizontal" if selects => shell.apply_candidate_vertical(false, out),
         "set.orientation.vertical" if selects => shell.apply_candidate_vertical(true, out),
+        "set.spacing" => {
+            let on = checked.unwrap_or(!shell.settings().spacing);
+            if on != shell.settings().spacing {
+                shell.set_spacing(on, out);
+            }
+        }
         _ => {
             if let Some(app) = key.strip_prefix(REMOVE_APP) {
                 shell.remove_app_profile(app, out);

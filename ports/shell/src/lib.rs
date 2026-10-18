@@ -9,5 +9,6 @@ pub mod menu_tree;
 pub mod panel;
 pub mod prefs;
 pub mod shell;
+pub mod spacing;
 
 pub use shell::{ClientInfo, Effect, Effects, LeftText, PlatformTables, RerankRunner, SessionId, Setup, Shell};
