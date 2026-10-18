@@ -64,18 +64,18 @@ pub enum Msg {
 }
 
 impl Msg {
-    /// One line for `SHANJIE_TRACE`.
+    /// One line for `SHANJIE_TRACE`: the event and its numbers, never what was typed or the client's text (s3b R2).
     fn describe(&self) -> String {
         match self {
             Msg::Open(id) => format!("open {id}"),
             Msg::Close(id) => format!("close {id}"),
-            Msg::Key { id, keyval, keycode, state, .. } => format!("key {id} {keyval:#x} {keycode} {state:#x}"),
+            Msg::Key { id, state, .. } => format!("key {id} state {state:#x}"),
             Msg::FocusIn { id, client, .. } => format!("focus in {id} {client:?}"),
             Msg::FocusOut { id, .. } => format!("focus out {id}"),
             Msg::Reset { id, .. } => format!("reset {id}"),
             Msg::Enable { id, .. } => format!("enable {id}"),
             Msg::Disable { id, .. } => format!("disable {id}"),
-            Msg::Surrounding { id, text, cursor, anchor } => format!("surrounding {id} {text:?} {cursor} {anchor}"),
+            Msg::Surrounding { id, text, cursor, anchor } => format!("surrounding {id} {} chars {cursor} {anchor}", text.chars().count()),
             Msg::ContentType { id, purpose } => format!("content type {id} {purpose}"),
             Msg::Click { id, index, .. } => format!("click {id} {index}"),
             Msg::Page { id, up, .. } => format!("page {id} up={up}"),

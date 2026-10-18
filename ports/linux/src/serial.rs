@@ -271,14 +271,3 @@ mod tests {
         assert_eq!(Component::SIGNATURE.to_string(), "(sa{sv}ssssssssavav)");
     }
 }
-
-#[cfg(test)]
-mod dump {
-    #[test]
-    #[ignore]
-    fn print_objects() {
-        let table = super::LookupTable::page(&["測".into(), "試".into()], &["1".into(), "2".into()], Some(0), 0).value();
-        println!("TABLE {}", zbus::zvariant::Value::from(table));
-        println!("TEXT {}", zbus::zvariant::Value::from(super::Text::with_attributes("ab", vec![(1, 1, 0, 2)]).value()));
-    }
-}
