@@ -26,8 +26,13 @@ use crate::learn::{context_key, is_full_context, is_han, is_single, Record, GLOB
 use std::fmt::Write as _;
 use std::fs::{self, DirBuilder, File, OpenOptions, Permissions};
 use std::io::{ErrorKind, Read, Write};
+#[cfg(unix)]
 use std::os::fd::AsRawFd;
+#[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+// Windows (ports/docs/core-windows.md): the same calls under the same names, so the code below is shared.
+#[cfg(windows)]
+use crate::win_compat::{geteuid, DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt, ELOOP, O_NOFOLLOW, O_NONBLOCK};
 use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "learning.tsv";
@@ -65,6 +70,7 @@ const ELOOP: i32 = 40;
 #[cfg(all(target_os = "linux", not(target_arch = "x86_64")))]
 compile_error!("learn_store.rs has <fcntl.h> values only for macOS and x86_64 Linux (O_NOFOLLOW differs by architecture)");
 
+#[cfg(unix)]
 extern "C" {
     fn geteuid() -> u32;
     fn fcntl(fd: i32, cmd: i32, ...) -> i32;
@@ -81,6 +87,12 @@ fn barrier(f: &File) -> bool {
 
 /// Linux has neither command; fdatasync gives the same ordering for the off-Mac test runs.
 #[cfg(target_os = "linux")]
+fn barrier(f: &File) -> bool {
+    f.sync_data().is_ok()
+}
+
+/// Windows: FlushFileBuffers, the only ordering Windows offers before the rename.
+#[cfg(windows)]
 fn barrier(f: &File) -> bool {
     f.sync_data().is_ok()
 }
