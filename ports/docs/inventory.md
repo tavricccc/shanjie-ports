@@ -4,7 +4,7 @@
 
 - 舊版：`shanjie-multiplatform`（本機 `~/projects/shanjie-windows`），Windows 0.10.2、Linux 0.10.2，上游 pin 為 `b2f5da8`（2026-10-16，v0.4.6）。
 - 上游：`Nanako0129/shanjie` main `c0d1c64`（2026-10-18），比 `b2f5da8` 新 339 個 commit，最近的 release 是 v0.4.7。
-- 新移植版（這個 repo 的 `ports/`）：以 `c0d1c64` 為底，`core/` 只加了 Windows 的作業系統 shim（`ports/docs/core-windows.md`），shell 由 Swift 逐行移植，資料夾內容與上游 macOS app 的 Resources 完全相同。
+- 新移植版（這個 repo 的 `ports/`）：以 `c0d1c64` 為底，之後合併到上游 `1d6547d`（2026-10-19），`core/` 只加了 Windows 的作業系統 shim（`ports/docs/core-windows.md`），shell 由 Swift 逐行移植，資料夾內容與上游 macOS app 的 Resources 完全相同。
 
 來源標示：**〔查〕** 是這次直接查過程式、資料或設定範本；**〔文〕** 是依舊版 README、UPSTREAM-CHANGES.md 等文件的描述，沒有逐一重跑。
 
@@ -55,6 +55,10 @@
 - **repick-freeze**：從預測列選字時保留選取範圍左邊的詞；Backspace 拆開的片段在打下一個音節時釋放。
 - 其餘多為評測工具與文件。
 
+`c0d1c64..1d6547d`（盤點之後才合併進來）只有一項行為：
+
+- **中英文之間自動加空格**（cjk-spacing，「盤古之白」）：送出時在漢字和半形英文、數字之間加一個空白，開頭也看游標前一個字。預設關，只在設定視窗。移植版照搬（`ports/shell/src/spacing.rs`），放在選單的設定項目裡。
+
 ## 四、預設值：舊版範本與上游
 
 舊版新安裝時用 `interaction=windows`（`shared/src/profile.rs` 的預設），Linux 用同一份範本（`linux/common/src/paths.rs` 的 `TEMPLATE = profiles/windows.ini`）〔查〕。另一份 `profiles/shanjie.ini`（「善解操作」）要手動套用。
@@ -78,7 +82,7 @@
 | Shift+空白 | 上游行為 | **全半形切換**（`shift_space_toggle=1`） | 關 |
 | Ctrl+標點 | 上游行為 | **全形標點**（`ctrl_punctuation=1`） | 關 |
 | Shift／直接標點 | 上游 core 的標點表 | **全部遮罩**（`[punctuation]` 全 0：不出全形標點） | 全開 |
-| 提交後額外空白 | 無 | 關 | **開**（`space_after_commit=1`） |
+| 提交後額外空白 | 無（中英之間自動加空格是另一回事，預設關） | 關 | **開**（`space_after_commit=1`） |
 | 獨立聲調鍵 | 上游行為 | 關（`standalone_tones=0`） | 開 |
 | Ctrl+\ | 上游 core 使用 | **關**（`ctrl_backslash=0`） | 開 |
 | 英數模式 | 無 | `alphanumeric=1` | 0 |
@@ -154,7 +158,7 @@
 
 新架構的 overlay 有兩層：
 
-- **只改預設值**：`ports/overlay/defaults.ini`（兩個平台共用）、`linux.ini`、`windows.ini`，打包時合併。只影響使用者從沒選過的設定，使用者存過的值永遠優先。目前三份都是空的，等於上游行為。可用的鍵是上游的 12 個 UserDefaults 鍵，例如 `prediction=false`、`profileMode=chat`、`english=false`。
+- **只改預設值**：`ports/overlay/defaults.ini`（兩個平台共用）、`linux.ini`、`windows.ini`，打包時合併。只影響使用者從沒選過的設定，使用者存過的值永遠優先。目前三份都是空的，等於上游行為。可用的鍵是上游的 13 個 UserDefaults 鍵，例如 `prediction=false`、`profileMode=chat`、`english=false`。
 - **新行為**：需要寫程式。原則是放在 shell 或平台層、做成預設關閉的開關，不改 `core/`，這樣上游更新時可以直接合併。
 
 把第四、五節的項目照這個原則分：
