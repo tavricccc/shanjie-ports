@@ -40,3 +40,4 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 4. 密碼欄不學習、失焦不提交；語言列選單的每個項目。
 5. AppContainer App（設定、Microsoft Store 的 App）裡能連到 host。
 6. host 不在時按鍵照常放行，App 不卡。
+7. 開啟「中英文之間自動加空格」後，在記事本的英文後面打中文，開頭會有空白（DLL 要讀得到游標前的文字）。
