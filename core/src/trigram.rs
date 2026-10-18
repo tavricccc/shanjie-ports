@@ -11,17 +11,22 @@
 use crate::lm::LmError;
 use std::ffi::c_void;
 use std::ops::Deref;
+#[cfg(unix)]
 use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::sync::OnceLock;
 
 // <sys/mman.h>: PROT_READ and MAP_PRIVATE have the same values on macOS and x86_64 Linux (learn_store.rs refuses to build elsewhere);
 // `off_t` is 64 bits on both. std has no names for them and the crate has no libc dependency.
+#[cfg(unix)]
 const PROT_READ: i32 = 1;
+#[cfg(unix)]
 const MAP_PRIVATE: i32 = 2;
 /// `mmap` returns this (all bits set), not null, on failure.
+#[cfg(unix)]
 const MAP_FAILED: *mut c_void = !0usize as *mut c_void;
 
+#[cfg(unix)]
 extern "C" {
     fn mmap(addr: *mut c_void, len: usize, prot: i32, flags: i32, fd: i32, off: i64) -> *mut c_void;
     fn munmap(addr: *mut c_void, len: usize) -> i32;
@@ -49,6 +54,7 @@ impl Mapped {
     /// The file must not be truncated or rewritten in place while the mapping is alive: a page past a new end is a SIGBUS, and
     /// bytes that change after `Tri::parse` checked them break the invariants the lookups rely on (an index could panic).
     /// Replacing the file by rename is fine (the mapping keeps the old inode).
+    #[cfg(unix)]
     pub(crate) unsafe fn open(path: &Path) -> Result<Mapped, LmError> {
         use std::os::unix::fs::OpenOptionsExt;
         let f = std::fs::OpenOptions::new().read(true).custom_flags(crate::tinylm::O_NONBLOCK).open(path).map_err(|_| LmError::TriTable)?;
@@ -64,6 +70,22 @@ impl Mapped {
         }
         Ok(Mapped { ptr, len })
     }
+
+    /// Windows (ports/docs/core-windows.md): the same checks, then a read-only view of the whole file.
+    ///
+    /// # Safety
+    /// As the Unix `open`. Windows refuses to truncate or replace a mapped file, so the bytes cannot change under it.
+    #[cfg(windows)]
+    pub(crate) unsafe fn open(path: &Path) -> Result<Mapped, LmError> {
+        let f = std::fs::File::open(path).map_err(|_| LmError::TriTable)?;
+        let meta = f.metadata().map_err(|_| LmError::TriTable)?;
+        let len = meta.len() as usize;
+        if !meta.is_file() || len == 0 {
+            return Err(LmError::TriTable);
+        }
+        let ptr = crate::win_compat::map_read_only(&f, len).ok_or(LmError::TriTable)?;
+        Ok(Mapped { ptr, len })
+    }
 }
 
 impl Deref for Mapped {
@@ -77,7 +99,15 @@ impl Deref for Mapped {
 impl Drop for Mapped {
     fn drop(&mut self) {
         // SAFETY: exactly the range `mmap` returned, unmapped once.
-        unsafe { munmap(self.ptr, self.len) };
+        #[cfg(unix)]
+        unsafe {
+            munmap(self.ptr, self.len)
+        };
+        // SAFETY: the view `map_read_only` returned, unmapped once.
+        #[cfg(windows)]
+        unsafe {
+            crate::win_compat::unmap(self.ptr)
+        };
     }
 }
 
