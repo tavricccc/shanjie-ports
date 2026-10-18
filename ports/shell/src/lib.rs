@@ -3,3 +3,4 @@
 //! with the same defaults, the same menu. A platform supplies only what ShanjieKit gets from AppKit and IMK: the keys,
 //! the client's text and identity, and somewhere to draw (ports/docs/porting.md).
 pub mod core;
+pub mod prefs;
