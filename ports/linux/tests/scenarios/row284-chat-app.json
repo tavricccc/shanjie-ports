@@ -1,0 +1,19 @@
+{
+ "client": "gtk3-im:discord",
+ "keys": [
+  [
+   "type",
+   "tj6z;6vup 5j; xk7u ek7xm4gjo3cj6"
+  ],
+  [
+   65293,
+   28,
+   0
+  ]
+ ],
+ "expect_commits": [
+  "廚房新裝了一個率水壺"
+ ],
+ "settle": 0.08,
+ "final_wait": 0.5
+}

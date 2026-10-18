@@ -1,0 +1,18 @@
+{
+ "keys": [
+  [
+   "type",
+   "su3"
+  ],
+  [
+   65457,
+   79,
+   0
+  ]
+ ],
+ "expect_commits": [
+  "你"
+ ],
+ "settle": 0.08,
+ "final_wait": 0.5
+}

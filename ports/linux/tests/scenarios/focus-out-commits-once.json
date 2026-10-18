@@ -1,0 +1,16 @@
+{
+ "keys": [
+  [
+   "type",
+   "su3cl3"
+  ],
+  [
+   "focus_out"
+  ]
+ ],
+ "expect_commits": [
+  "你好"
+ ],
+ "settle": 0.08,
+ "final_wait": 0.5
+}

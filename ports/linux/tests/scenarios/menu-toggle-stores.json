@@ -1,0 +1,36 @@
+{
+ "keys": [
+  [
+   "property",
+   "prediction",
+   0
+  ],
+  [
+   "property",
+   "layout.eten",
+   1
+  ],
+  [
+   "wait",
+   8
+  ],
+  [
+   "type",
+   "ne3"
+  ],
+  [
+   65293,
+   28,
+   0
+  ]
+ ],
+ "expect_commits": [
+  "你"
+ ],
+ "expect_settings": [
+  "prediction=false",
+  "layout=eten"
+ ],
+ "settle": 0.08,
+ "final_wait": 0.5
+}
