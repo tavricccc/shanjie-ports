@@ -1,0 +1,6 @@
+[package]
+name = "shanjie-proto"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "The protocol between the Shanjie TSF DLL and shanjie-host.exe"
