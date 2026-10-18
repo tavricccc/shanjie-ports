@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 資料夾與上游 macOS app 的 Resources 相同 | `ports/data/fetch.sh` 依上游記錄的 SHA-256 下載與檢查；`assemble.sh` 照 `scripts/build-app.sh` 的清單組裝，產生的 english-words.txt 也比對上游的 SHA-256 | 本機、CI |
 | shell（`ports/shell`）的行為 | 39 個測試，用真的 core 與資料，逐項移植自 ShellTests.swift、CJKSpacingTests.swift 等；中英文之間自動加空格的契約列出的 8 個突變，每一個都至少讓一個測試失敗 | 本機、CI |
-| Linux 引擎（IBus） | 9 個端對端情境，在私有的 dbus 與 ibus-daemon 上，用 IBus 的 Python client 打字（`ports/linux/tests`）：你好、row284 書面與聊天、失焦只提交一次、密碼欄捨棄、預測列數字選字、數字鍵盤、選單開關存檔、中英之間的開頭空白 | 本機、CI |
+| Linux 引擎（IBus） | 9 個端對端情境，在私有的 dbus 與 ibus-daemon 上，用 IBus 的 Python client 打字（`ports/linux/tests`）：你好、row284 書面與聊天、失焦只提交一次、密碼欄捨棄、預測列數字選字、數字鍵盤、選單開關存檔、中英之間的開頭空白 | 本機（Fedora 44，IBus 1.5.34）、CI（Ubuntu 24.04，IBus 1.5.29） |
 | Linux 套件 | 打包後從安裝後的目錄結構執行過情境 | 本機 |
 | Windows 程式能編譯 | `x86_64-pc-windows-gnu` 交叉編譯，警告視為錯誤；CI 另在 Windows runner 上用 MSVC 編譯 | 本機、CI |
 | Windows host 的邏輯 | `host/tests/hub.rs`（8 個）用真的 core 與資料、假的 pipe 與候選窗；`proto` 的訊息往返與按鍵分類測試 | 本機（Linux）、CI（Linux 與 Windows） |
