@@ -1,0 +1,127 @@
+name: Ports
+
+# The Linux and Windows ports (ports/): the shell tests, the Linux end-to-end scenarios on a private ibus-daemon, the
+# Windows cross build, and the Windows host tests on a real Windows runner. Upstream's ci.yml stays as it is.
+on:
+  push:
+    branches: [ports]
+  pull_request:
+    branches: [ports]
+  workflow_dispatch:
+
+concurrency:
+  group: ports-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The upstream data assets (ports/data/fetch.sh) into the cache the Ubuntu jobs restore, and the assembled folder for
+  # the Windows runner.
+  data:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/lm
+            ~/.cache/shanjie/english
+          key: ports-data-${{ hashFiles('data/*.sha256', 'tools/build_english_words.py') }}
+      - run: ports/data/fetch.sh && ports/data/assemble.sh build/ports/data
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: data
+          path: build/ports/data
+          retention-days: 1
+
+  linux:
+    needs: data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0 # ports/version.sh describes the upstream release
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/lm
+            ~/.cache/shanjie/english
+          key: ports-data-${{ hashFiles('data/*.sha256', 'tools/build_english_words.py') }}
+      - run: ports/data/fetch.sh && ports/data/assemble.sh build/ports/data
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ibus python3-gi gir1.2-ibus-1.0 dbus
+      - name: shell tests
+        run: cargo test --locked --manifest-path ports/shell/Cargo.toml
+      - name: engine tests and build
+        run: |
+          cargo test --locked --manifest-path ports/linux/Cargo.toml
+          cargo build --release --locked --manifest-path ports/linux/Cargo.toml
+      - name: scenarios
+        run: ports/linux/tests/run-scenarios.sh
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-scenario-logs
+          path: build/ports/linux-scenarios
+      - name: package
+        run: ports/linux/scripts/package.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-package
+          path: build/ports/dist/*.tar.gz*
+
+  windows-cross:
+    needs: data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/lm
+            ~/.cache/shanjie/english
+          key: ports-data-${{ hashFiles('data/*.sha256', 'tools/build_english_words.py') }}
+      - run: ports/data/fetch.sh
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64 zip
+      - run: rustup target add x86_64-pc-windows-gnu
+      - name: build (warnings are errors)
+        run: cargo build --release --locked --target x86_64-pc-windows-gnu --manifest-path ports/windows/Cargo.toml
+        env:
+          RUSTFLAGS: -D warnings
+      - name: package
+        run: ports/windows/scripts/package.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-package
+          path: build/ports/dist/*.zip*
+
+  # The protocol and the host's logic, with the real core (and its Windows shim) and the real data, on Windows itself.
+  # The TSF DLL, the pipes and the candidate window are not exercised here.
+  windows-native:
+    needs: data
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: data
+          path: build/ports/data
+      - name: proto and host tests
+        run: cargo test --locked --manifest-path ports/windows/Cargo.toml -p shanjie-proto -p shanjie-host
+      - name: build (warnings are errors)
+        run: cargo build --release --locked --manifest-path ports/windows/Cargo.toml
+        env:
+          RUSTFLAGS: -D warnings
