@@ -99,3 +99,30 @@ pub mod dialog {
     pub const FAILED_MESSAGE: &str = "有檔案沒有刪掉，請再試一次。";
     pub const OK: &str = "好";
 }
+
+/// The settings window's labels (macos/Sources/Shanjie/SettingsWindow.swift), for platforms that show those settings.
+pub mod settings_text {
+    pub const TITLE: &str = "善解設定";
+    pub const LAYOUT: &str = "鍵盤排列";
+    pub const LAYOUT_STANDARD: &str = "標準";
+    pub const LAYOUT_ETEN: &str = "倚天";
+    pub const PROFILE_MODE: &str = "切換方式";
+    pub const PROFILE_AUTO: &str = "依 App 自動";
+    pub const PROFILE_CHAT: &str = "一律聊天";
+    pub const PROFILE_FORMAL: &str = "一律書面";
+    pub const PROFILE_NOTE: &str = "依 App 自動：聊天 App（Discord、LINE、訊息等）用聊天設定，其他 App 用書面設定。";
+    pub const APP_PROFILES: &str = "個別設定的 App";
+    pub fn app_profiles_empty() -> String {
+        format!("在 App 裡打開善解選單，勾選「{}」，就會列在這裡。", super::text::APP_CHAT)
+    }
+    pub const CHAT: &str = "聊天";
+    pub const FORMAL: &str = "書面";
+    pub const REMOVE: &str = "移除";
+    pub const RERANK_LEVEL: &str = "強度";
+    pub const RERANK_CONSERVATIVE: &str = "保守";
+    pub const RERANK_STANDARD: &str = "標準";
+    pub const RERANK_AGGRESSIVE: &str = "積極";
+    pub const ORIENTATION: &str = "候選窗方向";
+    pub const HORIZONTAL: &str = "橫排";
+    pub const VERTICAL: &str = "直排";
+}
