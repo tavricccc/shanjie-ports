@@ -1,0 +1,16 @@
+[package]
+name = "shanjie-shell"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "The platform-neutral part of upstream's macOS shell (macos/Sources/ShanjieKit), ported to Rust for the Linux and Windows ports"
+
+[lib]
+name = "shanjie_shell"
+
+[dependencies]
+# The upstream core, used only through its C ABI (core/include/shanjie.h), exactly as the Swift shell uses it.
+shanjie-core = { package = "core", path = "../../core" }
+
+# Its own workspace: the repository root workspace (core, cli) is upstream's and stays untouched.
+[workspace]
