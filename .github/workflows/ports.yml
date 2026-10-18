@@ -57,7 +57,7 @@ jobs:
       - run: ports/data/fetch.sh && ports/data/assemble.sh build/ports/data
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ibus python3-gi gir1.2-ibus-1.0 dbus
       - name: shell tests
-        run: cargo test --locked --manifest-path ports/shell/Cargo.toml
+        run: cargo test --manifest-path ports/shell/Cargo.toml # a library: no Cargo.lock
       - name: engine tests and build
         run: |
           cargo test --locked --manifest-path ports/linux/Cargo.toml
