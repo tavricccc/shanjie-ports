@@ -174,6 +174,7 @@ pub struct Record {
 }
 
 /// Local calendar day as days since 1970-01-01 (the `Record::day` unit).
+#[cfg(unix)]
 pub fn local_day() -> i64 {
     #[repr(C)]
     struct Tm {
@@ -201,6 +202,12 @@ pub fn local_day() -> i64 {
         (t, off)
     };
     (t + off).div_euclid(86_400)
+}
+
+/// Windows (ports/docs/core-windows.md): the same day from `GetLocalTime`.
+#[cfg(windows)]
+pub fn local_day() -> i64 {
+    crate::win_compat::local_day()
 }
 
 /// Weight of `r` on `today`: halves every `HALF_LIFE_DAYS`; a clock that went back never grows it.
