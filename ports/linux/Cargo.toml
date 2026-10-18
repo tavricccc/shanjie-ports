@@ -1,0 +1,22 @@
+[package]
+name = "shanjie-linux"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Shanjie on Linux: an IBus engine around the upstream core and the ported shell"
+
+[[bin]]
+name = "ibus-engine-shanjie"
+path = "src/main.rs"
+
+[dependencies]
+shanjie-shell = { path = "../shell" }
+zbus = { version = "5", default-features = false, features = ["async-io"] }
+futures-lite = "2"
+async-channel = "2"
+
+# The Linux build is its own workspace: nothing here is shared with the Windows build except the two path crates.
+[workspace]
+
+[profile.release]
+debug = false
