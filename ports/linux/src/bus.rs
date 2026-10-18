@@ -128,14 +128,17 @@ impl EngineObject {
     async fn set_content_type(&self, value: (u32, u32)) {
         let _ = self.hub.send(Msg::ContentType { id: self.id, purpose: value.0 });
     }
-    /// true: the daemon calls FocusInId with the client name.
+    /// true: the daemon calls FocusInId with the client name. A plain boolean although the introspection says `(b)`:
+    /// the daemon reads it with `g_variant_get_boolean` (bus/engineproxy.c `_get_has_focus_id_cb`), as ibusengine.c
+    /// sends it.
     #[zbus(property)]
-    async fn focus_id(&self) -> (bool,) {
-        (true,)
+    async fn focus_id(&self) -> bool {
+        true
     }
+    /// The same: the daemon asks for the surrounding text on every focus in.
     #[zbus(property)]
-    async fn active_surrounding_text(&self) -> (bool,) {
-        (true,)
+    async fn active_surrounding_text(&self) -> bool {
+        true
     }
 
     #[zbus(signal)]
