@@ -1,0 +1,18 @@
+[package]
+name = "shanjie-tsf"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "shanjie_tsf.dll: the text service in every app; reads and writes the document, forwards to shanjie-host.exe"
+
+[lib]
+name = "shanjie_tsf"
+crate-type = ["cdylib"]
+
+# No core and no shell here: the DLL is loaded into every app and stays small. Everything that decides lives in the host.
+[dependencies]
+shanjie-proto = { path = "../proto" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
+windows-core = { workspace = true }
