@@ -4,6 +4,9 @@
 //! - OnTestKeyDown: claims every key-down except a modifier alone, and except Ctrl / Alt / Windows-key combinations
 //!   while nothing is composed here (Ctrl+\ is claimed: the core uses it). OnKeyDown then asks the host in a
 //!   synchronous edit session and returns the shell's answer, so a key the shell passes reaches the app [`handle`];
+//! - a modifier key alone is never claimed, but the host hears of it for 單按 Shift (a Windows habit): a press from
+//!   OnTestKeyDown (not a repeat), a Shift release from OnKeyUp in a synchronous edit session, as toggling 中／英
+//!   commits the composition; OnTestKeyUp claims Shift releases only to get that call, OnKeyUp never eats them;
 //! - OnSetFocus of the thread manager: the old document's session is deactivated inside an edit session of the context
 //!   holding the composition (the shell commits it there), the new one activated [`deactivateServer`/`activateServer`];
 //! - OnCompositionTerminated (the app ended the composition, its text already in the document): `Commit`, and the
@@ -132,6 +135,11 @@ fn modifiers() -> u8 {
         m |= MOD_CAPSLOCK;
     }
     m
+}
+
+/// VK_SHIFT, VK_LSHIFT, VK_RSHIFT.
+fn is_shift(w: WPARAM) -> bool {
+    matches!(w.0, 0x10 | 0xA0 | 0xA1)
 }
 
 fn raw_key(w: WPARAM, l: LPARAM) -> RawKey {
@@ -620,6 +628,10 @@ impl ITfKeyEventSink_Impl for Service_Impl {
         let k = raw_key(w, l);
         let class = classify(k);
         if class == Class::Modifier {
+            // Bit 30: the key was already down (a repeat).
+            if (l.0 >> 30) & 1 == 0 && inner.connected() {
+                let _ = inner.call(|s| Request::Modifier { session: s, key: k, down: true });
+            }
             return Ok(false.into());
         }
         let chord = k.modifiers & (MOD_CONTROL | MOD_ALT | MOD_WIN) != 0;
@@ -653,10 +665,26 @@ impl ITfKeyEventSink_Impl for Service_Impl {
         Ok((ran && handled.get()).into())
     }
 
-    fn OnTestKeyUp(&self, _: Ref<ITfContext>, _: WPARAM, _: LPARAM) -> Result<BOOL> {
-        Ok(false.into())
+    fn OnTestKeyUp(&self, _: Ref<ITfContext>, w: WPARAM, _: LPARAM) -> Result<BOOL> {
+        let inner = &self.inner;
+        Ok((is_shift(w) && inner.open() && inner.connected()).into())
     }
-    fn OnKeyUp(&self, _: Ref<ITfContext>, _: WPARAM, _: LPARAM) -> Result<BOOL> {
+
+    fn OnKeyUp(&self, ctx: Ref<ITfContext>, w: WPARAM, l: LPARAM) -> Result<BOOL> {
+        let inner = self.inner.clone();
+        let Some(ctx) = ctx.cloned() else { return Ok(false.into()) };
+        if !is_shift(w) || !inner.open() {
+            return Ok(false.into());
+        }
+        let k = raw_key(w, l);
+        let c2 = ctx.clone();
+        let me = inner.clone();
+        inner.request(&ctx, TF_ES_SYNC | TF_ES_READWRITE, move |cookie| unsafe {
+            if let Some(Reply::Text(text)) = me.call(|s| Request::Modifier { session: s, key: k, down: false }) {
+                me.apply(&c2, cookie, text, false)?;
+            }
+            Ok(())
+        });
         Ok(false.into())
     }
     fn OnPreservedKey(&self, _: Ref<ITfContext>, _: *const GUID) -> Result<BOOL> {

@@ -127,6 +127,7 @@ fn session_of(r: &Request) -> Option<u64> {
         | Request::Commit { session, .. }
         | Request::Menu { session, .. }
         | Request::Choose { session, .. }
-        | Request::Close { session } => Some(*session),
+        | Request::Close { session }
+        | Request::Modifier { session, .. } => Some(*session),
     }
 }

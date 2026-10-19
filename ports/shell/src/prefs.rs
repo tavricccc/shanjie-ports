@@ -45,6 +45,8 @@ pub struct Defaults {
     pub rerank: bool,
     pub rerank_level: String,
     pub profile_mode: String,
+    /// The Windows habits' keys (`win.*`, winops.rs) the overlay sets, as written; absent: upstream's behavior.
+    pub win: BTreeMap<String, String>,
 }
 
 impl Defaults {
@@ -63,6 +65,7 @@ impl Defaults {
             rerank: true,
             rerank_level: "standard".into(),
             profile_mode: "auto".into(),
+            win: BTreeMap::new(),
         }
     }
 
@@ -87,6 +90,10 @@ impl Defaults {
                 key::RERANK => set_bool(&mut d.rerank, &v),
                 key::RERANK_LEVEL => set_choice(&mut d.rerank_level, &v, &["conservative", "standard", "aggressive"]),
                 key::PROFILE_MODE => set_choice(&mut d.profile_mode, &v, &["auto", "chat", "formal"]),
+                k if crate::winops::valid_default(k, &v) => {
+                    d.win.insert(k.to_string(), v.clone());
+                    true
+                }
                 _ => false,
             };
             if !ok {
@@ -116,7 +123,7 @@ fn set_choice(slot: &mut String, v: &str, allowed: &[&str]) -> bool {
     }
 }
 
-fn parse_bool(v: &str) -> Option<bool> {
+pub(crate) fn parse_bool(v: &str) -> Option<bool> {
     match v {
         "true" => Some(true),
         "false" => Some(false),

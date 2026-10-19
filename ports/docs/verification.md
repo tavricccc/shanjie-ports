@@ -8,7 +8,8 @@
 | --- | --- | --- |
 | 資料夾與上游 macOS app 的 Resources 相同 | `ports/data/fetch.sh` 依上游記錄的 SHA-256 下載與檢查；`assemble.sh` 照 `scripts/build-app.sh` 的清單組裝，產生的 english-words.txt 也比對上游的 SHA-256 | 本機、CI |
 | shell（`ports/shell`）的行為 | 39 個測試，用真的 core 與資料，逐項移植自 ShellTests.swift、CJKSpacingTests.swift 等；中英文之間自動加空格的契約列出的 8 個突變，每一個都至少讓一個測試失敗 | 本機、CI |
-| Linux 引擎（IBus） | 9 個端對端情境，在私有的 dbus 與 ibus-daemon 上，用 IBus 的 Python client 打字（`ports/linux/tests`）：你好、row284 書面與聊天、失焦只提交一次、密碼欄捨棄、預測列數字選字、數字鍵盤、選單開關存檔、中英之間的開頭空白 | 本機（Fedora 44，IBus 1.5.34）、CI（Ubuntu 24.04，IBus 1.5.29） |
+| Windows 操作（`docs/windows-habits.md`） | 28 個測試（`ports/shell/tests/windows_habits.rs`），用真的 core 與資料：每一項設定的開與關、選單、範本、overlay，以及 Windows 注音順序混打（例子取自舊移植版的測試）；`merge.sh` 接受的鍵與 shell 的設定表一致 | 本機（還沒在 CI 跑過） |
+| Linux 引擎（IBus） | 10 個端對端情境，在私有的 dbus 與 ibus-daemon 上，用 IBus 的 Python client 打字（`ports/linux/tests`）：你好、row284 書面與聊天、失焦只提交一次、密碼欄捨棄、預測列數字選字、數字鍵盤、選單開關存檔、中英之間的開頭空白、單按 Shift 切換中英後再用 Windows 注音順序混打（這一個還沒在 CI 跑過） | 本機（Fedora 44，IBus 1.5.34）、CI（Ubuntu 24.04，IBus 1.5.29） |
 | Linux 套件 | 打包後從安裝後的目錄結構執行過情境 | 本機 |
 | Windows 程式能編譯 | `x86_64-pc-windows-gnu` 交叉編譯，警告視為錯誤；CI 另在 Windows runner 上用 MSVC 編譯 | 本機、CI |
 | Windows host 的邏輯 | `host/tests/hub.rs`（8 個）用真的 core 與資料、假的 pipe 與候選窗；`proto` 的訊息往返與按鍵分類測試 | 本機（Linux）、CI（Linux 與 Windows） |
@@ -18,7 +19,7 @@
 
 **Windows 的執行期全部沒有在實機上跑過**：
 
-- TSF DLL：註冊、語言 profile、按鍵（OnTestKeyDown／OnKeyDown）、edit session、display attribute、語言列選單與圖示。
+- TSF DLL：註冊、語言 profile、按鍵（OnTestKeyDown／OnKeyDown；單按 Shift 用的 OnTestKeyUp／OnKeyUp 與 `Request::Modifier`）、edit session、display attribute、語言列選單與圖示。
 - host 與 DLL 之間的 named pipe（含 AppContainer 的存取權限）、host 自動啟動與重連。
 - GDI 候選窗的位置、DPI、點選。
 - `install.ps1`／`uninstall.ps1`。

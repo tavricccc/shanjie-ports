@@ -225,6 +225,14 @@ impl Hub {
             }
             Msg::Key { id, keyval, keycode, state, reply } => {
                 self.sync(id);
+                if let Some((m, down)) = crate::keys::modifier(keyval, state) {
+                    // A lone modifier still goes to the app; the shell only watches it (單按 Shift).
+                    let mut fx = Effects::new();
+                    self.shell.modifier(id, m, down, &mut fx);
+                    let out = self.translate(fx, None);
+                    let _ = reply.send_blocking((false, out));
+                    return;
+                }
                 let (handled, out) = match crate::keys::translate(keyval, keycode, state) {
                     None => (false, Out::new()),
                     Some(input) => {

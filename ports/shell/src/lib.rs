@@ -10,5 +10,6 @@ pub mod panel;
 pub mod prefs;
 pub mod shell;
 pub mod spacing;
+pub mod winops;
 
-pub use shell::{ClientInfo, Effect, Effects, LeftText, PlatformTables, RerankRunner, SessionId, Setup, Shell};
+pub use shell::{ClientInfo, Modifier, Effect, Effects, LeftText, PlatformTables, RerankRunner, SessionId, Setup, Shell};

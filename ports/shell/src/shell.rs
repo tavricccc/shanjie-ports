@@ -15,8 +15,13 @@ use crate::keys::{self, KeyInput, ShanjieKey};
 use crate::menu::{text, Action, InputMode, MenuEntry};
 use crate::prefs::{key, Defaults, Prefs};
 use crate::spacing;
-use std::collections::{BTreeMap, HashMap};
+use crate::winops::{self, Special};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+mod win;
+
+pub use win::Modifier;
 
 pub type SessionId = u64;
 
@@ -263,6 +268,25 @@ pub struct Shell {
     owner: Option<SessionId>,
     composing: bool,
     clients: HashMap<SessionId, ClientInfo>,
+    /// The Windows habits (winops.rs): the switches as chosen, the punctuation switches that are off, the Shift side.
+    win_flags: HashMap<&'static str, bool>,
+    punct_off: HashSet<String>,
+    shift_side: winops::ShiftSide,
+    /// 中／英: false while the keys go to the app as they are (單按 Shift, Ctrl＋空白). Not stored, as on Windows.
+    chinese: bool,
+    shift_tap: win::ShiftTap,
+    special: Special,
+    /// Windows 注音順序混打: the keys typed since the last syllable, not yet sent to the core, and whether they are
+    /// English already (win.rs).
+    mix_raw: String,
+    mix_latin: bool,
+    /// The core's latest preedit and cursor (UTF-16), the raw keys are shown inside it.
+    core_text: (String, u32),
+    /// Whether the last output had the candidate window open or the prediction row entered, and an English run open.
+    cands_open: bool,
+    core_run: bool,
+    syllables: Option<HashSet<String>>,
+    english_words: Option<Vec<String>>,
 }
 
 /// `LeftContext.maxUTF16`.
@@ -367,8 +391,22 @@ impl Shell {
             owner: None,
             composing: false,
             clients: HashMap::new(),
+            win_flags: HashMap::new(),
+            punct_off: HashSet::new(),
+            shift_side: winops::ShiftSide::Both,
+            chinese: true,
+            shift_tap: win::ShiftTap::Idle,
+            special: Special::default(),
+            mix_raw: String::new(),
+            mix_latin: false,
+            core_text: (String::new(), 0),
+            cands_open: false,
+            core_run: false,
+            syllables: None,
+            english_words: None,
             prefs,
         };
+        shell.load_win(defaults);
         shell.build();
         shell
     }
@@ -645,13 +683,13 @@ impl Shell {
     fn set_english(&mut self, on: bool) -> Option<CoreResult> {
         self.english_on = on;
         self.prefs.set_bool(key::ENGLISH, on);
-        self.engine.as_ref().map(|e| e.set_english(on))
+        self.core_english()
     }
 
     fn set_english_inline(&mut self, on: bool) -> Option<CoreResult> {
         self.english_inline_on = on;
         self.prefs.set_bool(key::ENGLISH_INLINE, on);
-        self.engine.as_ref().map(|e| e.set_english_inline(on))
+        self.engine.as_ref().map(|e| e.set_english_inline(self.core_english_inline()))
     }
 
     fn set_candidate_vertical(&mut self, on: bool) -> Option<CoreResult> {
@@ -750,8 +788,8 @@ impl Shell {
         let _ = e.set_demote(self.demote_on);
         let _ = e.set_prediction(self.prediction_on);
         let _ = e.set_abbreviation(self.abbreviation_on);
-        let _ = e.set_english(self.english_on);
-        let _ = e.set_english_inline(self.english_inline_on);
+        let _ = e.set_english(self.english_on || self.win_flag(winops::key::MIXED));
+        let _ = e.set_english_inline(self.core_english_inline());
         let _ = e.set_candidate_vertical(self.candidate_vertical);
         let _ = e.set_rerank(self.rerank_on);
         let _ = e.set_rerank_level(self.rerank_level.code());
@@ -796,6 +834,7 @@ impl Shell {
         let notes = o.candidates.iter().map(|c| self.names.get(c).cloned()).collect();
         self.shown_vertical = o.vertical;
         self.hint_shown = false;
+        self.cands_open = o.selected >= 0;
         self.panel_session = Some(id);
         out.push((
             id,
@@ -816,15 +855,21 @@ impl Shell {
     pub const ENGLISH_RUN_HINT: &'static str = "空白：英文斷開";
 
     fn show_hint(&mut self, id: SessionId, anchor: u32, out: &mut Effects) {
+        self.show_hint_text(id, Self::ENGLISH_RUN_HINT, anchor, out);
+    }
+
+    fn show_hint_text(&mut self, id: SessionId, text: &str, anchor: u32, out: &mut Effects) {
         self.shown_vertical = if self.candidate_vertical { 2 } else { 0 };
         self.hint_shown = true;
+        self.cands_open = false;
         self.panel_session = Some(id);
-        out.push((id, Effect::ShowHint { text: Self::ENGLISH_RUN_HINT.to_string(), vertical: self.shown_vertical, anchor_utf16: anchor }));
+        out.push((id, Effect::ShowHint { text: text.to_string(), vertical: self.shown_vertical, anchor_utf16: anchor }));
     }
 
     /// `hideCandidates`: the one panel, wherever it is.
     fn hide_candidates(&mut self, out: &mut Effects) {
         self.hint_shown = false;
+        self.cands_open = false;
         self.shown_vertical = 0;
         let target = self.panel_session.take().or(self.owner).unwrap_or(NO_SESSION);
         out.push((target, Effect::HideCandidates));
@@ -835,6 +880,7 @@ impl Shell {
         if let Some(e) = &self.engine {
             let _ = e.reset(1);
         }
+        self.win_clear();
         self.composing = false;
         self.hide_candidates(out);
     }
@@ -889,9 +935,15 @@ impl Shell {
         if self.engine.is_none() {
             return false;
         }
+        self.shift_tap.spoil();
         if self.claim(id, out) {
             let app = self.client(id).app_id;
             self.apply_profile(id, app.as_deref(), out);
+        }
+        // The Windows habits see the key first; `None` leaves it to upstream's path below.
+        let input = self.win_input(input);
+        if let Some(handled) = self.win_key(id, input, out) {
+            return handled;
         }
         match input {
             KeyInput::Page { up, modifiers } if self.vertical_open() && modifiers == 0 => {
@@ -942,6 +994,11 @@ impl Shell {
     pub fn candidate_selected(&mut self, id: SessionId, index: u32, out: &mut Effects) -> bool {
         if self.owner != Some(id) || self.engine.is_none() || self.hint_shown {
             return false;
+        }
+        if self.special.active() {
+            let r = self.special.pick(index as usize);
+            self.special_out(id, r, out);
+            return true;
         }
         self.apply_learning_gate(id);
         let r = self.engine.as_ref().map(|e| e.pick(index));
@@ -1036,21 +1093,7 @@ impl Shell {
             return false;
         }
         let paused = self.apply_learning_gate(id);
-        // Once per composition, before the key that may start it: only a character key without Control, Option, Command
-        // or Caps Lock can start one. cjk-spacing section 1: the previous character starts as unknown for every key that
-        // may start a composition, modifiers or not, and is taken from the same read.
-        if !self.composing {
-            self.spacing_prev.remove(&id);
-            if key.kind == keys::CHAR && key.modifiers & !keys::SHIFT == 0 {
-                let (han, last) = if paused { (None, None) } else { self.left_context(id) };
-                if let Some(k) = last {
-                    self.spacing_prev.insert(id, k);
-                }
-                if let Some(e) = &self.engine {
-                    let _ = e.set_left_context(han.as_deref());
-                }
-            }
-        }
+        self.prime(id, key, paused);
         let r = self.engine.as_ref().map(|e| e.key(key));
         match r {
             Some(CoreResult::Ok(o)) => {
@@ -1070,15 +1113,42 @@ impl Shell {
         }
     }
 
-    /// `Session.finish(mode:)`: 0 commits to this session's client, 1 discards.
+    /// Once per composition, before the key that may start it: only a character key without Control, Option, Command
+    /// or Caps Lock can start one. cjk-spacing section 1: the previous character starts as unknown for every key that
+    /// may start a composition, modifiers or not, and is taken from the same read. (Part of `Session.send`.)
+    fn prime(&mut self, id: SessionId, key: ShanjieKey, paused: bool) {
+        if !self.composing {
+            self.spacing_prev.remove(&id);
+            if key.kind == keys::CHAR && key.modifiers & !keys::SHIFT == 0 {
+                let (han, last) = if paused { (None, None) } else { self.left_context(id) };
+                if let Some(k) = last {
+                    self.spacing_prev.insert(id, k);
+                }
+                if let Some(e) = &self.engine {
+                    let _ = e.set_left_context(han.as_deref());
+                }
+            }
+        }
+    }
+
+    /// `Session.finish(mode:)`: 0 commits to this session's client, 1 discards. The Windows mixed input's raw keys go
+    /// with the composition, where they are shown; the symbol table and an unfinished code are dropped.
     fn finish(&mut self, id: SessionId, mode: u32, out: &mut Effects) {
         if self.engine.is_none() {
             return;
         }
+        let raw = std::mem::take(&mut self.mix_raw);
+        self.mix_latin = false;
+        self.special.close();
         self.apply_learning_gate(id);
         let r = self.engine.as_ref().map(|e| e.reset(mode));
         match r {
-            Some(CoreResult::Ok(o)) => self.apply(id, o, out),
+            Some(CoreResult::Ok(mut o)) => {
+                if mode == 0 && !raw.is_empty() {
+                    o.commit = win::with_raw(&o.commit, &self.core_text, &raw);
+                }
+                self.apply(id, o, out)
+            }
             Some(CoreResult::Failed(c)) => {
                 self.fail(id, c, out);
             }
@@ -1089,12 +1159,10 @@ impl Shell {
     /// `Session.apply(_:)`: commit first, then the preedit, then the candidates (section 7).
     fn apply(&mut self, id: SessionId, o: CoreOutput, out: &mut Effects) {
         if !o.commit.is_empty() {
-            let text = if self.spacing_on { spacing::apply(self.spacing_prev.get(&id).copied(), &o.commit) } else { o.commit.clone() };
-            if let Some(k) = spacing::last(&text) {
-                self.spacing_prev.insert(id, k);
-            }
-            out.push((id, Effect::Insert(text)));
+            self.insert(id, &o.commit, out);
         }
+        self.core_text = (o.preedit.clone(), o.cursor_utf16);
+        self.core_run = o.english_run_len > 0;
         if !o.preedit.is_empty() {
             out.push((
                 id,
@@ -1115,11 +1183,22 @@ impl Shell {
         self.take_rerank(id, out);
     }
 
+    /// `insertText` of what the shell commits: 全形 first (a Windows habit), then cjk-spacing.
+    fn insert(&mut self, id: SessionId, commit: &str, out: &mut Effects) {
+        let commit = if self.win_flag(winops::key::FULL_WIDTH) { winops::full_width(commit) } else { commit.to_string() };
+        let text = if self.spacing_on { spacing::apply(self.spacing_prev.get(&id).copied(), &commit) } else { commit };
+        if let Some(k) = spacing::last(&text) {
+            self.spacing_prev.insert(id, k);
+        }
+        out.push((id, Effect::Insert(text)));
+    }
+
     /// `Session.fail(_:)`: the core discards its composition too, the marked text and the panel are cleared, the key passes.
     fn fail(&mut self, id: SessionId, _code: i32, out: &mut Effects) -> bool {
         if let Some(e) = &self.engine {
             let _ = e.reset(1);
         }
+        self.win_clear();
         out.push((id, Effect::ClearMarked));
         self.composing = false;
         self.hide_candidates(out);
@@ -1130,7 +1209,7 @@ impl Shell {
 
     /// `applyLearningGate`: sampled before every core call that may learn, sent every time. Returns whether paused.
     fn apply_learning_gate(&mut self, id: SessionId) -> bool {
-        let paused = self.learning_pause(&self.client(id)).is_some();
+        let paused = self.learning_pause(&self.client(id)).is_some() || !self.win_flag(winops::key::LEARNING);
         if let Some(e) = &self.engine {
             let _ = e.set_learning(!paused);
         }
@@ -1141,7 +1220,10 @@ impl Shell {
     /// for cjk-spacing.
     fn left_context(&self, id: SessionId) -> (Option<String>, Option<spacing::Kind>) {
         match self.client(id).left {
-            Some(left) if !left.text.is_empty() => (han_tail(&left.text, left.truncated), spacing::last(&left.text)),
+            Some(left) if !left.text.is_empty() => {
+                let han = if self.win_flag(winops::key::CONTEXT) { han_tail(&left.text, left.truncated) } else { None };
+                (han, spacing::last(&left.text))
+            }
             _ => (None, None),
         }
     }

@@ -12,7 +12,7 @@
 //! Framing: a little-endian u32 length, then the message; strings are u32 length + UTF-8.
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 /// The host's pipe for one user: the user's SID keeps two users of one machine apart (the DACL does the rest).
 pub fn pipe_name(user_sid: &str) -> String {
@@ -183,6 +183,9 @@ pub enum Request {
     Choose { session: u64, key: String, client: Client },
     /// The DLL instance is going away.
     Close { session: u64 },
+    /// A modifier key alone, pressed or released (the Windows habit 單按 Shift). Sent outside an edit session for a
+    /// press, inside one for a release, which may commit the composition. Answered with `Reply::Text`.
+    Modifier { session: u64, key: RawKey, down: bool },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -432,6 +435,15 @@ impl Request {
                 e.u8(8);
                 e.u64(*session);
             }
+            Request::Modifier { session, key, down } => {
+                e.u8(9);
+                e.u64(*session);
+                e.u16(key.vk);
+                e.u16(key.scan);
+                e.bool(key.extended);
+                e.u8(key.modifiers);
+                e.bool(*down);
+            }
         }
         e.0
     }
@@ -452,6 +464,11 @@ impl Request {
             6 => Request::Menu { session: d.u64()?, client: d.client()? },
             7 => Request::Choose { session: d.u64()?, key: d.str()?, client: d.client()? },
             8 => Request::Close { session: d.u64()? },
+            9 => {
+                let session = d.u64()?;
+                let key = RawKey { vk: d.u16()?, scan: d.u16()?, extended: d.bool()?, modifiers: d.u8()? };
+                Request::Modifier { session, key, down: d.bool()? }
+            }
             _ => return Err(bad()),
         };
         d.end()?;
@@ -570,6 +587,7 @@ mod tests {
             Request::Menu { session: 2, client: client() },
             Request::Choose { session: 2, key: "layout.eten".into(), client: client() },
             Request::Close { session: 3 },
+            Request::Modifier { session: 3, key: RawKey { vk: 0x10, scan: 0x36, extended: false, modifiers: MOD_SHIFT }, down: false },
         ];
         for r in all {
             assert_eq!(Request::decode(&r.encode()).unwrap(), r);

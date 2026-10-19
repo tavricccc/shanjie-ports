@@ -171,6 +171,10 @@
 | 改 core 才做得到 | 候選範圍在游標右側、Windows 注音順序混打與容錯、字面數字／標點留在組字區、獨立聲調、拼音、Big5 過濾、聯想 | 舊版都是覆蓋 core；建議先確認是否真的需要，需要的話以 patch 形式集中管理 |
 | 獨立功能 | 個人詞庫與加詞浮層、線上模型、設定視窗 | 另外規劃 |
 
+### 後續（2026-10-19）
+
+能在 shell 做、不改 `core/` 的項目已經做成「Windows 操作」，預設全部停在上游行為：單按 Shift／Ctrl+空白切換中英、全形、Caps Lock 英文、Ctrl+標點、標點遮罩、選字後直接提交、符號表、Unicode 字碼、學習與前文開關、Windows 注音順序混打與容錯，以及一鍵套用舊版 Windows 範本。對照表、和舊版不同的地方、沒做的項目與原因，見 `ports/docs/windows-habits.md`。
+
 ## 附：怎麼重現這份盤點
 
 - 舊版設定範本：`~/projects/shanjie-windows/profiles/windows.ini`、`shanjie.ini`

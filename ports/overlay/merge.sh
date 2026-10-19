@@ -10,6 +10,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 platform="$1"; out="$2"
 [ -f "$here/$platform.ini" ] || { echo "error: no overlay for $platform" >&2; exit 1; }
 known="layout demoteSensitive prediction abbreviation english englishInline cjkSpacing acgPack glassTint candidateVertical rerank rerankLevel profileMode"
+# The Windows habits (ports/shell/src/winops.rs; ports/docs/windows-habits.md).
+known="$known win.shiftToggle win.shiftSide win.ctrlSpaceToggle win.shiftSpaceWidth win.fullWidth win.capsLockEnglish win.ctrlPunctuation win.symbolTable win.codeInput win.enterCommits win.learning win.leftContext win.mixedInput win.mixedTolerance win.punct.shift.comma win.punct.shift.period win.punct.shift.slash win.punct.shift.1 win.punct.shift.semicolon win.punct.shift.lbracket win.punct.shift.rbracket win.punct.shift.9 win.punct.shift.0 win.punct.shift.backquote win.punct.shift.backslash win.punct.shift.quote win.punct.shift.equal win.punct.plain.lbracket win.punct.plain.rbracket win.punct.plain.backslash win.punct.plain.quote win.punct.plain.equal win.punct.plain.backquote"
 awk -v platform="$platform" -v known="$known" '
   BEGIN { split(known, ks, " "); for (j in ks) ok[ks[j]] = 1 }
   { sub(/\r$/, "") }

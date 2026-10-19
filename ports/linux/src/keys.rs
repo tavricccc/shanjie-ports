@@ -11,6 +11,7 @@
 //! Modifier keys pressed on their own are not key-down events on macOS (they are flagsChanged, which the shell ignores):
 //! here they are `None`, so the platform passes them without touching the composition.
 use shanjie_shell::keys::{self, KeyInput};
+use shanjie_shell::Modifier;
 
 // IBusModifierType (ibustypes.h).
 pub const SHIFT_MASK: u32 = 1 << 0;
@@ -47,6 +48,18 @@ pub fn modifiers(state: u32) -> u32 {
 /// Hyper, ISO Level 3/5 shift and lock, Num Lock, Scroll Lock, Mode switch.
 fn modifier_only(keyval: u32) -> bool {
     matches!(keyval, 0xffe1..=0xffee | 0xfe01..=0xfe13 | 0xff7f | 0xff14 | 0xff7e)
+}
+
+/// A modifier key pressed (true) or released on its own, for the Windows habit 單按 Shift (`Shell::modifier`): Shift by
+/// side, Control, Alt, Meta and Super as `Other`. `None` for every other key.
+pub fn modifier(keyval: u32, state: u32) -> Option<(Modifier, bool)> {
+    let m = match keyval {
+        0xffe1 => Modifier::Shift { right: false },
+        0xffe2 => Modifier::Shift { right: true },
+        0xffe3..=0xffe4 | 0xffe7..=0xffee => Modifier::Other,
+        _ => return None,
+    };
+    Some((m, state & RELEASE_MASK == 0))
 }
 
 /// evdev codes (linux/input-event-codes.h).
@@ -140,6 +153,15 @@ mod tests {
         assert!(translate(0xffe1, 42, 0).is_none());
         assert!(translate(0xffe5, 58, 0).is_none(), "Caps Lock");
         assert!(translate('a' as u32, 30, RELEASE_MASK).is_none());
+    }
+
+    #[test]
+    fn lone_modifiers_for_the_shift_tap() {
+        assert_eq!(modifier(0xffe1, 0), Some((Modifier::Shift { right: false }, true)));
+        assert_eq!(modifier(0xffe2, RELEASE_MASK | SHIFT_MASK), Some((Modifier::Shift { right: true }, false)));
+        assert_eq!(modifier(0xffe3, 0), Some((Modifier::Other, true)));
+        assert_eq!(modifier('a' as u32, 0), None);
+        assert_eq!(modifier(0xffe5, 0), None, "Caps Lock is not part of a tap");
     }
 
     #[test]

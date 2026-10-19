@@ -8,9 +8,12 @@
 //!   on the ports and is left out.
 //! - 清除選字記憶… asks first on macOS (an alert with 清除 and 取消). Here it is a submenu with those two items, the alert's
 //!   title as its first line.
+//! - The Windows habits (winops.rs), which upstream does not have, follow the settings as two more submenus: Windows 操作
+//!   (everything but the punctuation, in groups under a line each) and Windows 操作：標點 (one switch per mark).
 //! A node is chosen by its key (`activate`).
 use crate::menu::{dialog, settings_text as st, text, Action, InputMode};
 use crate::shell::{ProfileMode, RerankLevel};
+use crate::winops::{self, key as wk, ShiftSide};
 use crate::{Effects, SessionId, Shell};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,6 +144,74 @@ fn settings_submenus(shell: &Shell) -> Vec<Node> {
     out
 }
 
+fn toggle(key: &str, label: &str, checked: bool, enabled: bool) -> Node {
+    node(key, Kind::Toggle, label, checked, enabled, Vec::new())
+}
+
+/// The Windows habits' labels that are not a switch's own.
+pub mod win_text {
+    pub const MENU: &str = "Windows 操作";
+    pub const PUNCT_MENU: &str = "Windows 操作：標點";
+    pub const CHINESE: &str = "中文輸入（關掉時按鍵直接給 App）";
+    pub const GROUP_SWITCH: &str = "── 切換 ──";
+    pub const SIDE_BOTH: &str = "左右 Shift 都可以";
+    pub const SIDE_LEFT: &str = "只用左 Shift";
+    pub const SIDE_RIGHT: &str = "只用右 Shift";
+    pub const GROUP_KEYS: &str = "── 按鍵 ──";
+    pub const GROUP_MIXED: &str = "── 中英混打 ──";
+    pub const MIXED_NOTE: &str = "沒打完的注音照按鍵顯示，按聲調才轉中文；不像注音的就是英文。只支援標準鍵盤。";
+    pub const GROUP_LEARNING: &str = "── 學習 ──";
+    pub const GROUP_TEMPLATE: &str = "── 範本 ──";
+    pub const TEMPLATE: &str = "套用舊版 Windows 操作（也會關掉即時預測與上游中英混打、改成一律聊天）";
+    pub const RESET: &str = "Windows 操作全部還原成上游";
+    pub const PUNCT_ALL_ON: &str = "全部打中文標點";
+    pub const PUNCT_ALL_OFF: &str = "全部改成直接送出按鍵";
+    pub const PUNCT_NOTE: &str = "勾選：善解打出中文標點。取消：按鍵直接給 App。";
+}
+
+fn win_flag_node(shell: &Shell, k: &str, enabled: bool) -> Node {
+    let f = winops::FLAGS.iter().find(|f| f.key == k).expect("a habit of winops::FLAGS");
+    toggle(f.key, f.label, shell.win_flag(f.key), enabled)
+}
+
+/// Windows 操作 and Windows 操作：標點.
+fn win_submenus(shell: &Shell) -> Vec<Node> {
+    use win_text as wt;
+    let side = shell.shift_side();
+    let shift = shell.win_flag(wk::SHIFT_TOGGLE);
+    let mixed = shell.mixed_available();
+    let main = vec![
+        toggle("win.chinese", wt::CHINESE, shell.chinese(), true),
+        win_flag_node(shell, wk::FULL_WIDTH, true),
+        info("win.group.switch", wt::GROUP_SWITCH),
+        win_flag_node(shell, wk::SHIFT_TOGGLE, true),
+        radio("win.side.both", wt::SIDE_BOTH, side == ShiftSide::Both, shift),
+        radio("win.side.left", wt::SIDE_LEFT, side == ShiftSide::Left, shift),
+        radio("win.side.right", wt::SIDE_RIGHT, side == ShiftSide::Right, shift),
+        win_flag_node(shell, wk::CTRL_SPACE, true),
+        win_flag_node(shell, wk::SHIFT_SPACE, true),
+        win_flag_node(shell, wk::CAPS_ENGLISH, true),
+        info("win.group.keys", wt::GROUP_KEYS),
+        win_flag_node(shell, wk::CTRL_PUNCT, true),
+        win_flag_node(shell, wk::SYMBOLS, true),
+        win_flag_node(shell, wk::CODE_INPUT, true),
+        win_flag_node(shell, wk::ENTER_COMMITS, true),
+        info("win.group.mixed", wt::GROUP_MIXED),
+        win_flag_node(shell, wk::MIXED, mixed),
+        win_flag_node(shell, wk::MIXED_TOLERANCE, mixed && shell.win_flag(wk::MIXED)),
+        info("win.mixed.note", wt::MIXED_NOTE),
+        info("win.group.learning", wt::GROUP_LEARNING),
+        win_flag_node(shell, wk::LEARNING, true),
+        win_flag_node(shell, wk::CONTEXT, true),
+        info("win.group.template", wt::GROUP_TEMPLATE),
+        item("win.template.windows", wt::TEMPLATE),
+        item("win.template.upstream", wt::RESET),
+    ];
+    let mut punct = vec![info("win.punct.note", wt::PUNCT_NOTE), item("win.punct.all.on", wt::PUNCT_ALL_ON), item("win.punct.all.off", wt::PUNCT_ALL_OFF)];
+    punct.extend(winops::punct_switches().iter().map(|(k, label)| toggle(k, label, shell.punct_on(k), true)));
+    vec![submenu("win", wt::MENU, true, main), submenu("win.punct", wt::PUNCT_MENU, true, punct)]
+}
+
 /// The menu for session `id`.
 pub fn build(shell: &Shell, id: SessionId) -> Vec<Node> {
     let mut nodes = Vec::new();
@@ -148,7 +219,10 @@ pub fn build(shell: &Shell, id: SessionId) -> Vec<Node> {
         match e.action {
             None => nodes.push(info(&format!("info.{n}"), &e.title)),
             Some(a @ Action::Layout(_)) => nodes.push(radio(action_key(a), &e.title, e.checked, e.enabled)),
-            Some(Action::OpenSettings) => nodes.extend(settings_submenus(shell)),
+            Some(Action::OpenSettings) => {
+                nodes.extend(settings_submenus(shell));
+                nodes.extend(win_submenus(shell));
+            }
             Some(Action::Clear) => nodes.push(submenu(
                 "clear",
                 &e.title,
@@ -184,6 +258,30 @@ pub fn activate(shell: &mut Shell, id: SessionId, key: &str, checked: Option<boo
             let on = checked.unwrap_or(!shell.settings().spacing);
             if on != shell.settings().spacing {
                 shell.set_spacing(on, out);
+            }
+        }
+        "win.chinese" => {
+            if checked.unwrap_or(!shell.chinese()) != shell.chinese() {
+                shell.toggle_chinese(id, out);
+            }
+        }
+        "win.side.both" if selects => shell.set_shift_side(ShiftSide::Both, out),
+        "win.side.left" if selects => shell.set_shift_side(ShiftSide::Left, out),
+        "win.side.right" if selects => shell.set_shift_side(ShiftSide::Right, out),
+        "win.template.windows" => shell.apply_windows_template(out),
+        "win.template.upstream" => shell.reset_windows_habits(out),
+        "win.punct.all.on" => shell.set_all_punct(true, out),
+        "win.punct.all.off" => shell.set_all_punct(false, out),
+        k if winops::FLAGS.iter().any(|f| f.key == k) => {
+            let on = checked.unwrap_or(!shell.win_flag(k));
+            if on != shell.win_flag(k) {
+                shell.set_win_flag(k, on, out);
+            }
+        }
+        k if k.starts_with(wk::PUNCT) => {
+            let on = checked.unwrap_or(!shell.punct_on(k));
+            if on != shell.punct_on(k) {
+                shell.set_punct(k, on, out);
             }
         }
         _ => {

@@ -163,6 +163,17 @@ impl Hub {
                 self.close(session);
                 Reply::Done
             }
+            // No client state comes with it: a press is read outside an edit session.
+            Request::Modifier { session, key, down } => {
+                if !self.sessions.contains_key(&session) {
+                    return Reply::Text(Vec::new());
+                }
+                let mut fx = Effects::new();
+                if let Some(m) = keys::modifier(key) {
+                    self.shell.modifier(session, m, down, &mut fx);
+                }
+                Reply::Text(self.route(fx, Some(session)))
+            }
         }
     }
 

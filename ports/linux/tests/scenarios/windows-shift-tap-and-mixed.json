@@ -1,0 +1,17 @@
+{
+ "settings": "win.shiftToggle=true\nwin.mixedInput=true\nenglish=false\n",
+ "keys": [
+  ["type", "su3"],
+  [65505, 42, 0],
+  ["type", "ab"],
+  [65506, 54, 0],
+  ["type", "su3hello"],
+  [65293, 28, 0]
+ ],
+ "expect_commits": [
+  "你",
+  "你hello"
+ ],
+ "settle": 0.08,
+ "final_wait": 0.5
+}

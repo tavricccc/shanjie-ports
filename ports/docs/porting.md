@@ -1,6 +1,6 @@
 # 移植決定：哪裡和 macOS 版不同、為什麼
 
-原則：行為照上游 macOS 版。只有在平台沒有對應的東西，或平台的做法不一樣時，才換成最接近的做法。下面列出每一個這樣的地方。除此之外，兩個移植版的按鍵處理、選單、設定、學習閘門、聊天／書面、組字擁有者與語意校正佇列都是 `ports/shell`，由 Shell.swift、Learning.swift 逐段移植，並有對應的測試（`ports/shell/tests/shell.rs`）。
+原則：行為照上游 macOS 版。只有在平台沒有對應的東西，或平台的做法不一樣時，才換成最接近的做法。下面列出每一個這樣的地方。上游沒有的「Windows 操作」（舊移植版的設定）另列在 `windows-habits.md`，預設全部停在上游行為。除此之外，兩個移植版的按鍵處理、選單、設定、學習閘門、聊天／書面、組字擁有者與語意校正佇列都是 `ports/shell`，由 Shell.swift、Learning.swift 逐段移植，並有對應的測試（`ports/shell/tests/shell.rs`）。
 
 ## 共同
 
